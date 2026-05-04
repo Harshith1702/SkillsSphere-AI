@@ -64,10 +64,30 @@ export function extractExperienceInYears(text = "") {
   }
 
   // ================================
+  // 3. RANGE (3-5 years)
+  // ================================
+  const rangePattern = /(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)\s*\+?\s*(?:year|years|yr|yrs)/gi;
+  const combinedMatchedIndices = [];
+  
+  for (const match of clean.matchAll(rangePattern)) {
+    const lower = parseFloat(match[1]);
+    const upper = parseFloat(match[2]);
+    maxYears = Math.max(maxYears, (lower + upper) / 2);
+    combinedMatchedIndices.push({
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+
+  const isOverlapping = (index) => 
+    combinedMatchedIndices.some(range => index >= range.start && index <= range.end);
+
+  // ================================
   // 4. PLUS (2+ years)
   // ================================
   const plusRegex = /(\d+)\+?\s*(year|years|yr|yrs)/g;
   while ((match = plusRegex.exec(clean))) {
+    if (isOverlapping(match.index)) continue;
     maxYears = Math.max(maxYears, parseInt(match[1]));
   }
 
@@ -76,6 +96,7 @@ export function extractExperienceInYears(text = "") {
   // ================================
   const monthRegex = /(\d+)\s*(month|months|mo|mos)/g;
   while ((match = monthRegex.exec(clean))) {
+    if (isOverlapping(match.index)) continue;
     maxYears = Math.max(maxYears, parseInt(match[1]) / 12);
   }
 
