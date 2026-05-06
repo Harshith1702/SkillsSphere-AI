@@ -1,23 +1,20 @@
 import { weights } from "../config/weights.config.js";
 
 export const skillEvaluator = ({ resumeSkills = [], jobSkills = [] }) => {
-  if (jobSkills.length === 0) {
+  // Use the optimized normalizer
+  const normResume = normalizeSkillArray(resumeSkills);
+  const normJob = normalizeSkillArray(jobSkills);
+
+  if (jobSkills.length === 0 || normJob.length === 0) {
     return {
       score: 0,
       weight: weights.skill ?? 0.50,
       feedback: ["No job skills provided for comparison"],
       matchedSkills: [],
       missingSkills: [],
-      extraSkills: resumeSkills,
+      extraSkills: normResume,
     };
   }
-
-  // Normalize: lowercase, trim, unique
-  const normalize = (skills) => 
-    [...new Set(skills.map(s => s.toLowerCase().trim()).filter(Boolean))];
-
-  const normResume = normalize(resumeSkills);
-  const normJob = normalize(jobSkills);
 
   // Matched: intersection
   const matched = normJob.filter(s => normResume.includes(s));

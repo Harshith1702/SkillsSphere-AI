@@ -12,6 +12,13 @@ const summarizeFeedback = (feedback = []) => {
 
 const weightedScore = ({ score = 0, weight = 0 }) => round(score * weight);
 
+const resolveWeight = (value, fallback) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+
+  return parsed;
+};
+
 export const skillMatchEvaluator = {
   key: "skillMatch",
   evaluate: async (context = {}) => {
@@ -20,12 +27,14 @@ export const skillMatchEvaluator = {
       jobSkills: context.jobSkills || [],
     });
 
+    const weight = resolveWeight(context.skillWeight, result.weight);
+
     return {
       key: "skillMatch",
       label: "Skill Match",
       score: result.score,
-      weight: result.weight,
-      weightedScore: weightedScore(result),
+      weight,
+      weightedScore: weightedScore({ score: result.score, weight }),
       summary: summarizeFeedback(result.feedback),
       details: {
         feedback: result.feedback || [],
@@ -46,12 +55,14 @@ export const keywordMatchEvaluator = {
       jobDescription: context.jobDescription || "",
     });
 
+    const weight = resolveWeight(context.keywordWeight, result.weight);
+
     return {
       key: "keywordMatch",
       label: "Keyword Match",
       score: result.score,
-      weight: result.weight,
-      weightedScore: weightedScore(result),
+      weight,
+      weightedScore: weightedScore({ score: result.score, weight }),
       summary: summarizeFeedback(result.feedback),
       details: {
         feedback: result.feedback || [],
@@ -70,15 +81,17 @@ export const experienceMatchEvaluator = {
     const result = runExperienceEvaluator({
       candidateExperienceText: context.candidateExperienceText || "",
       jobDescription: context.jobDescription || "",
-      weight: context.experienceWeight,
+      weight: resolveWeight(context.experienceWeight, undefined),
     });
+
+    const weight = resolveWeight(context.experienceWeight, result.weight);
 
     return {
       key: "experienceMatch",
       label: "Experience Match",
       score: result.score,
-      weight: result.weight,
-      weightedScore: weightedScore(result),
+      weight,
+      weightedScore: weightedScore({ score: result.score, weight }),
       summary: summarizeFeedback(result.feedback),
       details: {
         feedback: result.feedback || [],

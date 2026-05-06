@@ -31,8 +31,8 @@ Implemented:
 - Resume Analyzer UI flow:
   - `src/modules/resume-analyzer/components/DragDropUpload.jsx`
   - `src/modules/resume-analyzer/components/AnalysisResult.jsx`
-  - `src/modules/resume-analyzer/pages/ResumeAnalyzerPage.jsx`
-  - `src/modules/resume-analyzer/services/resumeService.js`
+  - `src/modules/resume-analyzer/pages/ResumeAnalyzerPage.jsx` (Updated: integrated Job Description input)
+  - `src/modules/resume-analyzer/services/resumeService.js` (Updated: real API integration with JD support)
 - User Profile UI:
   - `src/modules/profile/ProfilePage.jsx`
   - `src/modules/profile/components/ProfileField.jsx`
@@ -46,6 +46,7 @@ Implemented:
   - `src/shared/components/Button.jsx`
   - `src/shared/components/Input.jsx`
   - `src/shared/components/Select.jsx`
+  - `src/shared/components/TextArea.jsx` (New: Multi-line text input)
   - `src/shared/components/LoadingState.jsx`
   - `src/shared/components/ErrorState.jsx`
   - `src/shared/components/EmptyState.jsx`
@@ -77,9 +78,18 @@ Implemented:
 - Resume upload and analysis flow:
   - `src/modules/resumes/routes.js`
   - `src/modules/resumes/controller.js`
+  - `src/modules/resumes/service.js` (New: Singleton resume logic and ownership enforcement)
   - `src/middleware/uploadResume.js`
+
   - `src/utils/parseResume.js`
+- Evaluator configuration:
+  - `src/config/evaluatorConfig.js`
 - Static upload serving via `app.use("/uploads", ...)`
+- Recruiter Job Posting system:
+  - `src/modules/jobs/routes.js`
+  - `src/modules/jobs/controller.js`
+  - `src/modules/jobs/service.js`
+  - `src/database/models/JobPosting.js`
 
 Scaffolded placeholders:
 
@@ -115,11 +125,21 @@ Scaffolded placeholders:
 - `POST /api/auth/verify-email`: verify user account via OTP
 - `POST /api/auth/resend-otp`: resend email verification OTP
 - `POST /api/resume/upload`: upload resume file
-- `POST /api/resume/analyze`: parse PDF resume, optional skill match, optional keyword relevance (`jobDescription`)
-- `GET /api/resume/result/:id`: placeholder result retrieval endpoint
+- `POST /api/resume/analyze`: parse PDF resume, latest-only upsert flow, optional skill/keyword/experience match
+- `GET /api/resume/me/latest`: fetch user's latest parsed resume (no raw resumeText)
+- `GET /api/resume/result/:id`: fetch stored resume record by ID
+
 - `GET /uploads/:filename`: static file access for uploaded files
+- `POST /api/jobs`: create a new job (Recruiter only)
+- `GET /api/jobs`: list all published jobs
+- `GET /api/jobs/:id`: get job details
+- `PATCH /api/jobs/:id`: update a job (Owner Recruiter only)
+- `DELETE /api/jobs/:id`: delete a job (Owner Recruiter only)
 
 ## Notes
 
-- Empty directories intentionally use `.gitkeep` so module structure remains versioned.
-- As each placeholder module is implemented, add module-level documentation under `docs/features` or inside module folders.
+- Empty folders intentionally contain `.gitkeep` so structure is versioned.
+- As implementation begins, add module-level README files where needed.
+
+
+- `job-matcher/` module now includes the Resume-First Job Recommendation UI with components for resume selection, match score, missing skills, and recommended jobs, following a modular and scalable structure.

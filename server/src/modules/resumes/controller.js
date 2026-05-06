@@ -10,11 +10,18 @@ import {
   semanticMatchEvaluator,
 } from "./evaluatorAdapters.js";
 import { runPipeline } from "../../../../ai-ml/pipeline/runPipeline.js";
+import {
+  normalizeResumeData,
+  normalizePipelineResult,
+} from "../../utils/normalizeResumeResponse.js";
+import * as resumeService from "./service.js";
+import AnalysisHistory from "../../database/models/AnalysisHistory.js";
 
 const defaultDependencies = {
   parseResume,
-  createResume: (payload) => Resume.create(payload),
+  upsertResume: (userId, payload) => resumeService.upsertResume(userId, payload),
 };
+
 
 let controllerDependencies = { ...defaultDependencies };
 
@@ -29,89 +36,7 @@ export const resetResumeControllerDependencies = () => {
   controllerDependencies = { ...defaultDependencies };
 };
 
-const parseSkillArrayString = (input) => {
-  try {
-    const parsed = JSON.parse(input);
-    if (!Array.isArray(parsed)) return null;
 
-    return {
-      skills: parsed.map((skill) => `${skill}`.trim()).filter(Boolean),
-      invalidJson: false,
-    };
-  } catch {
-    return null;
-  }
-};
-
-const normalizeSkillInput = (skillsInput) => {
-  if (!skillsInput) return { skills: [], invalidJson: false };
-
-  if (Array.isArray(skillsInput)) {
-    return {
-      skills: skillsInput
-        .flatMap((skill) => (typeof skill === "string" ? skill.split(",") : []))
-        .map((skill) => skill.trim())
-        .filter(Boolean),
-      invalidJson: false,
-    };
-  }
-
-  if (typeof skillsInput === "string") {
-    const trimmedInput = skillsInput.trim();
-    if (!trimmedInput) return { skills: [], invalidJson: false };
-
-    const parsedArray = parseSkillArrayString(trimmedInput);
-    if (parsedArray) return parsedArray;
-
-    return {
-      skills: trimmedInput.split(",").map((skill) => skill.trim()).filter(Boolean),
-      invalidJson: trimmedInput.startsWith("["),
-    };
-  }
-
-  return { skills: [], invalidJson: false };
-};
-
-const toLegacySkillMatch = (pipelineResult) => {
-  const result = pipelineResult.breakdown.skillMatch;
-  if (!result) return {};
-
-  return {
-    score: result.score,
-    weight: result.weight,
-    feedback: result.details.feedback || [],
-    matchedSkills: result.details.matchedSkills || [],
-    missingSkills: result.details.missingSkills || [],
-    extraSkills: result.details.extraSkills || [],
-  };
-};
-
-const toLegacyKeywordMatch = (pipelineResult) => {
-  const result = pipelineResult.breakdown.keywordMatch;
-  if (!result) return {};
-
-  return {
-    score: result.score,
-    weight: result.weight,
-    feedback: result.details.feedback || [],
-    matchedKeywords: result.details.matchedKeywords || [],
-    missingKeywords: result.details.missingKeywords || [],
-  };
-};
-
-const toLegacyExperienceMatch = (pipelineResult) => {
-  const result = pipelineResult.breakdown.experienceMatch;
-  if (!result) return {};
-
-  return {
-    score: result.score,
-    weight: result.weight,
-    feedback: result.details.feedback || [],
-    candidateExperience: result.details.candidateExperience,
-    requiredExperience: result.details.requiredExperience,
-    experienceGap: result.details.experienceGap,
-  };
-};
 
 const toLegacySemanticMatch = (pipelineResult) => {
   const result = pipelineResult.breakdown.semanticMatch;
@@ -142,28 +67,30 @@ export const uploadResume = asyncHandler(async (req, res, next) => {
   });
 });
 
-export const analyzeResume = asyncHandler(async (req, res, next) => {
-  if (!req.file) {
-    return next(new AppError("No resume file uploaded. Use form-data key `resume`.", 400));
-  }
+export const analyzeResume = async (req, res) => {
+  try {
+    const file = req.file;
 
-  const fileExtension = path.extname(req.file.originalname).toLowerCase();
-  if (fileExtension !== ".pdf") {
-    return next(new AppError("Only PDF files are supported for resume analysis right now", 400));
-  }
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: "Resume file is required",
+      });
+    }
 
-  const parsedData = await controllerDependencies.parseResume(req.file.path).catch((err) => {
-    throw new AppError(err.message || "Unable to extract text from resume", 400);
-  });
+    // Parse resume
+    const parsedData = await controllerDependencies.parseResume(file.path);
 
-  const { skills: jobSkills, invalidJson } = normalizeSkillInput(req.body?.jobSkills);
-  const jobDescription = typeof req.body?.jobDescription === "string" ? req.body.jobDescription : "";
-  const trimmedJobDescription = jobDescription.trim();
+    // Parse job inputs
+    const jobSkills = JSON.parse(req.body.jobSkills || "[]");
+    const jobDescription = req.body.jobDescription || "";
 
-  const candidateExperienceText =
-    Array.isArray(parsedData.experience) && parsedData.experience.length > 0
-      ? parsedData.experience.join(" ")
-      : parsedData.resumeText || "";
+    // 🧠 RUN PIPELINE (ONLY LOGIC ENTRY)
+    const pipelineResult = await runPipeline({
+      resumeData: parsedData,
+      jobSkills,
+      jobDescription,
+    });
 
   const evaluators = [];
   if (parsedData.skills?.length && jobSkills.length) {
@@ -174,31 +101,60 @@ export const analyzeResume = asyncHandler(async (req, res, next) => {
     evaluators.push(semanticMatchEvaluator);
   }
   evaluators.push(experienceMatchEvaluator);
+    // 🔥 Normalize everything
+    const safeData = normalizeResumeData(parsedData);
+    const safePipeline = normalizePipelineResult(pipelineResult);
 
-  const pipelineResult = await runPipeline({
-    evaluators,
-    context: {
-      parsedResume: parsedData,
-      resumeSkills: parsedData.skills || [],
+    // Save to DB (optional)
+    const savedResume = await controllerDependencies.upsertResume(req.user._id, {
+      ...safeData,
+      ...safePipeline,
       jobSkills,
-      resumeText: parsedData.resumeText || "",
-      jobDescription: trimmedJobDescription,
-      candidateExperienceText,
-    },
-  });
+      jobDescription,
+      file: {
+        originalName: file.originalname,
+        storedName: file.filename,
+        path: file.path,
+        size: `${(file.size / 1024).toFixed(2)} KB`,
+        mimeType: file.mimetype,
+      },
+    });
+
+    // Save Analysis History
+    await AnalysisHistory.create({
+      user: req.user._id,
+      score: safePipeline.score || 0,
+      classification: safePipeline.classification?.level || "Beginner",
+      skills: safeData.skills || [],
+      missingSkills: safePipeline.skillMatch?.missingSkills || [],
+      suggestions: safePipeline.gapAnalysis?.suggestions || [],
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Resume analyzed successfully",
+      resumeId: savedResume._id,
+      data: safeData,
+      ...safePipeline, // 🔥 single source of truth
+      file: savedResume.file,
+    });
+  } catch (error) {
+    console.error("Analyze Resume Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+    });
+  }
+};
 
   const skillMatch = toLegacySkillMatch(pipelineResult);
   const keywordMatch = toLegacyKeywordMatch(pipelineResult);
   const experienceMatch = toLegacyExperienceMatch(pipelineResult);
   const semanticMatch = toLegacySemanticMatch(pipelineResult);
+export const getResumeResult = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+  const resume = await Resume.findById(id).select("-resumeText").lean();
 
-  const fileData = {
-    originalName: req.file.originalname,
-    storedName: req.file.filename,
-    path: `/uploads/${req.file.filename}`,
-    size: `${(req.file.size / 1024).toFixed(2)} KB`,
-    mimeType: req.file.mimetype,
-  };
 
   const { resumeText, ...resumeFields } = parsedData;
 
@@ -220,11 +176,14 @@ export const analyzeResume = asyncHandler(async (req, res, next) => {
   if (Object.keys(keywordMatch).length > 0) successParts.push("keyword relevance");
   if (Object.keys(experienceMatch).length > 0) successParts.push("experience fit");
   if (Object.keys(semanticMatch).length > 0) successParts.push("semantic alignment");
+  if (!resume) {
+    return next(new AppError("Resume not found", 404));
+  }
 
-  const evalSummary =
-    successParts.length > 0
-      ? `Resume parsed, ${successParts.join(" and ")} evaluated, and saved successfully`
-      : "Resume parsed and saved successfully";
+  // Ensure the user owns this resume
+  if (resume.user.toString() !== req.user._id.toString()) {
+    return next(new AppError("You do not have permission to view this resume", 403));
+  }
 
   res.status(200).json({
     success: true,
@@ -241,18 +200,18 @@ export const analyzeResume = asyncHandler(async (req, res, next) => {
   });
 });
 
-export const getResumeResult = asyncHandler(async (req, res, next) => {
-  const { id } = req.params;
-  const resume = await Resume.findById(id).lean();
+export const getLatestResume = asyncHandler(async (req, res, next) => {
+  const resume = await resumeService.getLatestResume(req.user._id);
 
   if (!resume) {
-    return next(new AppError("Resume not found", 404));
+    return next(new AppError("No resume found for this user", 404));
   }
 
   res.status(200).json({
     success: true,
-    message: "Resume fetched successfully",
+    message: "Latest resume fetched successfully",
     data: resume,
   });
 });
+
 

@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { useToast, Button, LoadingState, ErrorState, PageHeader } from "../../../shared/components";
+import { useToast, LoadingState, ErrorState, PageHeader } from "../../../shared/components";
 import Navbar from "../../../shared/landing/Navbar";
 import AnalysisResult from "../components/AnalysisResult";
 import DragDropUpload from "../components/DragDropUpload";
+import JobDescriptionInput from "../components/JobDescriptionInput";
 import { analyzeResume } from "../services/resumeService";
+import { FileText, Sparkles } from "lucide-react";
 
 const ResumeAnalyzerPage = () => {
   const { success, error: showError, warning } = useToast();
@@ -11,18 +13,29 @@ const ResumeAnalyzerPage = () => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [jobDescription, setJobDescription] = useState("");
 
-  const handleFileUpload = async (file) => {
-    setLoading(true);
+  const handleFileUpload = (file) => {
     setSelectedFile(file);
     setError(null);
+  };
+
+  const handleAnalyze = async () => {
+    if (!selectedFile) {
+      showError("Please upload a resume first.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
     try {
-      const data = await analyzeResume(file);
-      setResult(data);
+      const result = await analyzeResume(selectedFile, jobDescription);
+      setResult(result);
       success("Resume analyzed successfully.");
     } catch (err) {
-      setError("Failed to analyze resume. Please try again.");
-      showError("Resume analysis failed. Please try again.");
+      const msg = err.message || "Failed to analyze resume. Please try again.";
+      setError(msg);
+      showError(msg);
       console.error(err);
     } finally {
       setLoading(false);
@@ -33,6 +46,7 @@ const ResumeAnalyzerPage = () => {
     setResult(null);
     setSelectedFile(null);
     setError(null);
+    setJobDescription("");
     warning("Resume analyzer has been reset.");
   };
 
@@ -68,7 +82,48 @@ const ResumeAnalyzerPage = () => {
                 onReset={resetAnalyzer}
               />
             ) : (
-              <DragDropUpload onFileUpload={handleFileUpload} />
+              <div className="space-y-10">
+                {/* Job Description Input */}
+                <JobDescriptionInput
+                  value={jobDescription}
+                  onChange={setJobDescription}
+                />
+
+                <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent"></div>
+
+                {/* Resume Upload Section */}
+                <div className="space-y-6">
+                  <div className="flex items-center gap-2 text-primary">
+                    <FileText className="w-5 h-5" />
+                    <h3 className="text-lg font-bold">Upload Resume</h3>
+                  </div>
+                  <DragDropUpload onFileUpload={handleFileUpload} />
+                  
+                  {/* Post-Upload Actions */}
+                  {selectedFile && (
+                    <div className="flex flex-col items-center gap-4 py-6 px-8 bg-primary/5 border border-primary/20 rounded-2xl animate-in fade-in zoom-in duration-300">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary/10 rounded-lg">
+                          <FileText className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-text-main">{selectedFile.name}</p>
+                          <p className="text-xs text-text-muted">{(selectedFile.size / 1024).toFixed(1)} KB • Ready for analysis</p>
+                        </div>
+                      </div>
+                      
+                      <button
+                        onClick={handleAnalyze}
+                        disabled={loading}
+                        className="w-full sm:w-auto px-8 py-3 bg-primary hover:bg-primary-hover disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl shadow-lg shadow-primary/20 transition-all transform hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-2"
+                      >
+                        <Sparkles className="w-5 h-5" />
+                        Analyze Resume
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>

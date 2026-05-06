@@ -1,25 +1,51 @@
-import { validateEvaluatorResult } from "./evaluatorContract.js";
+export function aggregateResults(evaluations, isJDProvided = true) {
+  let totalWeight = 0;
+  let weightedScoreSum = 0;
+  const breakdown = {};
 
-const round = (value) => Math.round(value * 100) / 100;
+  // Dynamic Weights Map
+  const weights = isJDProvided 
+    ? {
+        skillMatch: 0.3,
+        keywordMatch: 0.2,
+        experienceMatch: 0.1,
+        impactMatch: 0.15,
+        atsOptimization: 0.1,
+        readabilityMatch: 0.1,
+        consistencyMatch: 0.05,
+        techStandard: 0.0, // ignored in JD mode as skillMatch covers it
+      }
+    : {
+        skillMatch: 0.0,
+        keywordMatch: 0.0,
+        experienceMatch: 0.0,
+        impactMatch: 0.4,
+        atsOptimization: 0.3,
+        readabilityMatch: 0.15,
+        consistencyMatch: 0.1,
+        techStandard: 0.05,
+      };
 
-const clampScore = (value) => Math.min(Math.max(value, 0), 100);
+  evaluations.forEach((evalResult) => {
+    if (!evalResult || (evalResult.score === null && isJDProvided)) return;
 
-export const aggregateEvaluatorResults = (results = []) => {
-  const evaluators = results.map(validateEvaluatorResult);
+    // Use dynamic weight if defined, otherwise fallback to evalResult.weight
+    const weight = weights[evalResult.name] !== undefined ? weights[evalResult.name] : (evalResult.weight || 0);
 
-  const totalWeightedScore = round(
-    clampScore(evaluators.reduce((sum, item) => sum + item.weightedScore, 0)),
-  );
+    if (weight > 0 && evalResult.score !== null) {
+      totalWeight += weight;
+      weightedScoreSum += evalResult.score * weight;
+    }
 
-  const breakdown = evaluators.reduce((acc, item) => {
-    acc[item.key] = item;
-    return acc;
-  }, {});
+    breakdown[evalResult.name] = evalResult.score;
+  });
+
+  const finalScore =
+    totalWeight > 0 ? Math.round(weightedScoreSum / totalWeight) : 0;
 
   return {
-    score: totalWeightedScore,
+    score: finalScore,
     breakdown,
-    evaluators,
   };
-};
+}
 

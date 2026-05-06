@@ -91,16 +91,42 @@ SkillSphere AI aims to simplify the path from learning to hiring by giving users
 
 ---
 
+## ⚡ Quick Start (Unified Setup)
+
+To simplify setup, you can now run the entire project using root-level scripts.
+
+### Install all dependencies
+npm run install-all
+
+### Run the project (client + server together)
+npm run dev
+
+This will start:
+- Frontend (client)
+- Backend (server)
+
+> ⚠️ Backend requires environment variables to run properly. Refer to the Environment Setup section below.
+
 ## Scalable Folder Structure
 
 The following structure keeps the project modular and easy to scale for new contributors:
 
 ```text
 SkillSphere-AI/
-├── client/                          # React frontend
+├── client/                          # React frontend (Vite)
+│   ├── src/
+│   │   ├── modules/                 # Feature-based modules (Auth, Resumes, etc.)
+│   │   ├── shared/                  # Reusable UI components
+│   │   └── services/                # API service layer
 ├── server/                          # Express backend
+│   ├── src/
+│   │   ├── modules/                 # Backend business logic by domain
+│   │   ├── database/                # Mongoose models and connection
+│   │   └── middleware/              # Auth, RBAC, and Upload handlers
 ├── ai-ml/                           # AI/ML intelligence layer
-├── docs/                            # Documentation
+│   ├── evaluators/                  # Skill, Keyword, and Experience matchers
+│   └── pipeline/                    # Unified analysis pipeline
+├── docs/                            # Project documentation
 └── ...                              # Configuration and root files
 ```
 
@@ -116,9 +142,15 @@ SkillSphere-AI/
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
 - `POST /api/resume/upload`
-- `POST /api/resume/analyze`
+- `POST /api/resume/analyze` (v2: uses latest-only upsert flow)
+- `GET /api/resume/me/latest`: fetch user's latest parsed resume (no raw resumeText)
 - `GET /api/resume/result/:id`
+
 - `GET /uploads/:filename`
+- `POST /api/jobs`: create a new job (Recruiter only)
+- `GET /api/jobs`: list all published jobs (supports `designation`, `minSalary`, `maxSalary`, `postedWithin` filters)
+- `GET /api/jobs/recruiter`: list jobs posted by the authenticated recruiter
+- `GET /api/jobs/:id`: get job details
 
 ### Why this structure works
 
@@ -160,6 +192,10 @@ Implemented:
   - Tiered feedback: Strong (85+), Moderate (65+), Limited (40+), Low (<40) alignment
   - Safe handling of missing inputs with descriptive feedback messages
   - Unit tests at `ai-ml/evaluators/__tests__/semanticEvaluator.test.js`
+- **Latest-Only Resume Flow**: Implemented singleton resume pattern where each user keeps only one stored parsed record, with new uploads replacing the previous one
+- **Resume Service Layer**: Introduced `service.js` in the resumes module to manage upsert and ownership logic
+- **Data Privacy**: Enforced exclusion of `resumeText` from all resume API responses
+
 
 ### Authentication & Security Progress
 
@@ -187,6 +223,31 @@ Implemented:
 - Common Page Layouts: `PageHeader` with support for gradient typography
 - Barrel exports for shared components to simplify module imports
 - Integration of shared states into `ResumeAnalyzerPage`
+- **New Feature: Job Description Integration**
+  - Added `TextArea` shared component for multi-line inputs
+  - Added JD input section to `ResumeAnalyzerPage` with paste and .txt upload support
+  - Integrated `resumeService` with real backend API calls using `FormData`
+  - Support for sending `jobDescription` alongside resume file for keyword relevance scoring
+
+### Recruiter Job Management Progress
+
+Implemented:
+
+- JobPosting schema with `experienceRequired`, `jobLevel`, and matching-ready fields
+- RBAC-protected Job Creation API for Recruiters
+- Publicly accessible Job Listing and Detail APIs
+- Ownership-based Job Update and Delete APIs
+- Populated recruiter information in job responses
+
+### Job Search & Filtering Progress
+
+Implemented:
+
+- **Dynamic Mongoose Query Builder**: Supports filtering by `minSalary`, `maxSalary`, `designation` (regex title search), and `postedWithin` (date range).
+- **Recency Filters**: Added logic for `1d`, `7d`, and `30d` timeframe filtering.
+- **Database Performance**: Implemented indexes for `title`, `salary`, `status`, and `createdAt` for optimized search.
+- **Refactored Routes**: Unified job discovery under `/api/jobs` while preserving recruiter management security.
+- **Terminal Test Suite**: Created `server/test-filters.js` for direct validation of filtering logic.
 ```
 
 ## For Open-Source Contributors
@@ -219,7 +280,7 @@ Automated checks run on pull requests to `main` through:
 
 These checks validate docs/workflows and, once app code is added, automatically run lint/test/build for `client`, `server`, and `ai-ml` when their dependency manifests exist.
 
-## 🚀 Running the Project
+## 🚀 Running the Project (Manual Setup)
 
 ### Client
 
@@ -238,50 +299,62 @@ npm run dev
 ```
 
 ## 🔐 Environment Variables Setup
+> ⚠️ The backend will not start without configuring the required environment variables.
 
-Create a `.env` file inside the `server/` folder and add:
+### Server
 
-PORT=5000
-MONGO_URI=your_mongodb_uri
+1. Copy example file:
 
-JWT_SECRET=your_jwt_secret
-JWT_EXPIRES_IN=7d
+```bash
+cd server
+cp .env.example .env
+```
 
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_CALLBACK_URL=http://localhost:5000/api/auth/google/callback
+2. Update required values in `server/.env`:
 
-EMAIL_SERVICE_MODE=console
-EMAIL_HOST=smtp.mailtrap.io
-EMAIL_PORT=2525
-EMAIL_USER=your_smtp_username
-EMAIL_PASS=your_smtp_password
+- `MONGO_URI`
+- `JWT_SECRET`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
 
 # AI/ML Configuration (Required for semantic matching)
 OPENAI_API_KEY=your_openai_api_key
 
 ## 🔐 Google OAuth Setup
+- `EMAIL_SERVICE_MODE=console` (Use "smtp" for real emails)
+- `EMAIL_HOST=smtp.gmail.com`
+- `EMAIL_PORT=587`
+- `EMAIL_USER=your-email@gmail.com`
+- `EMAIL_PASS=your-app-password`
+- `EMAIL_FROM="SkillsSphere AI" <your-email@gmail.com>`
 
-1. Go to Google Cloud Console
-2. Create a new project
-3. Enable OAuth APIs
-4. Create OAuth credentials
-5. Add this redirect URI:
+# Evaluator toggles and weights (optional)
+EVALUATOR_SKILL_MATCH_ENABLED=true
+EVALUATOR_KEYWORD_MATCH_ENABLED=true
+EVALUATOR_EXPERIENCE_MATCH_ENABLED=true
+EVALUATOR_SKILL_MATCH_WEIGHT=1
+EVALUATOR_KEYWORD_MATCH_WEIGHT=0.2
+EVALUATOR_EXPERIENCE_MATCH_WEIGHT=0.2
 
-http://localhost:5000/api/auth/google/callback
+### Client
 
-6. Copy Client ID and Client Secret
-7. Add them to your `.env` file
+1. Copy example file:
 
-Server environment variables (create `server/.env` from `server/example.env`):
+```bash
+cd client
+cp .env.example .env
+```
+
+2. For local development, keep:
 
 - `MONGO_URI` or `MONGODB_URI`
 - `PORT` (backend default: `5000`)
 - `JWT_SECRET` (required for JWT registration)
 - `JWT_EXPIRES_IN` (optional, default is `7d`)
 - `OPENAI_API_KEY` (required for semantic resume-to-job-description matching)
+- `VITE_API_URL=http://localhost:5000`
 
-Example local development values:
+## 🔐 Google OAuth Setup
 
 - `JWT_SECRET=skillsphere_dev_jwt_secret_1234567890abcdef`
 - `JWT_EXPIRES_IN=7d`
@@ -291,12 +364,50 @@ Example local development values:
 - `EMAIL_USER=your_smtp_username`
 - `EMAIL_PASS=your_smtp_password`
 - `OPENAI_API_KEY=sk-...` (Required for semantic resume matching)
+1. Open Google Cloud Console.
+2. Create/select your project.
+3. Configure OAuth consent screen.
+4. Go to Credentials and create OAuth 2.0 Client ID (Web application).
+5. Add Authorized redirect URI exactly as:
 
+```text
+http://localhost:5000/api/auth/google/callback
 ```
 
+6. Copy Client ID and Client Secret into `server/.env`:
 
-
-
-
-
+```env
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_CALLBACK_URL=http://localhost:5000/api/auth/google/callback
+FRONTEND_URL=http://localhost:5174
 ```
+
+7. Restart both backend and frontend after updating env files.
+
+OAuth flow summary:
+
+- Frontend starts OAuth from `/api/auth/google`.
+- Google redirects to backend callback (`GOOGLE_CALLBACK_URL`).
+- Backend creates JWT and redirects to frontend callback (`FRONTEND_URL/auth/callback`).
+
+## 📧 Email SMTP Setup (Gmail)
+
+To use real email notifications (OTP verification, password reset) via Gmail, follow these steps:
+
+1. **Enable 2-Step Verification**: Go to your [Google Account Security](https://myaccount.google.com/security) and ensure 2-Step Verification is ON.
+2. **Generate App Password**:
+   - Search for "App Passwords" in your Google Account search bar.
+   - Enter a name (e.g., "SkillsSphere AI").
+   - Click **Create**.
+   - Copy the **16-character code** (e.g., `abcd efgh ijkl mnop`).
+3. **Update `server/.env`**:
+   ```env
+   EMAIL_SERVICE_MODE=smtp
+   EMAIL_HOST=smtp.gmail.com
+   EMAIL_PORT=587
+   EMAIL_USER=your-email@gmail.com
+   EMAIL_PASS=abcd efgh ijkl mnop
+   EMAIL_FROM="SkillsSphere AI" <your-email@gmail.com>
+   ```
+4. **Restart the server** to apply changes.
