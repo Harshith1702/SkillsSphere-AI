@@ -24,7 +24,7 @@ export const getJobs = async (filters = {}, token) => {
  * Apply to a job posting
  * @param {string} jobId - Job ID
  * @param {string} token - Auth token
- * @param {Object} options - Optional fields (resumeId, coverNote)
+ * @param {Object} options - Application fields (resumeLink, coverNote)
  * @returns {Promise<Object>} - API response
  */
 export const applyToJob = async (jobId, token, options = {}) => {
@@ -33,4 +33,13 @@ export const applyToJob = async (jobId, token, options = {}) => {
     body: options,
     token,
   });
+};
+
+/**
+ * Get current student's applied job IDs
+ * @param {string} token - Auth token
+ * @returns {Promise<Object>} - API response with appliedJobIds array
+ */
+export const getMyAppliedJobIds = async (token) => {
+  return apiRequest("/api/jobs/my-applications", { token });
 };
