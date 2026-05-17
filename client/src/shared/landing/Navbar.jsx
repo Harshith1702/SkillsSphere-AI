@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { Home, FileText, LayoutDashboard, MessageSquare, LogIn, UserPlus, X, Menu, LogOut, User, ChevronDown, Briefcase, Moon, Sun, Sparkles } from 'lucide-react';
+import { Home, FileText, LayoutDashboard, MessageSquare, LogIn, UserPlus, X, Menu, LogOut, User, ChevronDown, Briefcase, Moon, Sun, Sparkles, Rocket } from 'lucide-react';
 import Button from './Button';
 import { logout } from '../../features/auth/authSlice';
+import { getProtectedAssetUrl } from '../../utils/protectedAssetUrl';
 
 const Navbar = () => {
-  const { isAuthenticated, user } = useSelector((state) => state.auth);
+  const { isAuthenticated, user, token } = useSelector((state) => state.auth);
+  const avatarSrc = user?.profilePic ? getProtectedAssetUrl(user.profilePic, token) : null;
   const dispatch = useDispatch();
   const navigate = useNavigate();
   
@@ -56,7 +58,8 @@ const Navbar = () => {
       : [
           { name: 'Job Board', path: '/jobs', icon: <Briefcase size={20} /> },
           { name: 'Job Match', path: '/job-matcher', icon: <Sparkles size={20} /> },
-          { name: 'Resume Analyzer', path: '/resume-analyzer', icon: <FileText size={20} /> }
+          { name: 'Resume Analyzer', path: '/resume-analyzer', icon: <FileText size={20} /> },
+          { name: 'Roadmap', path: '/roadmap', icon: <Rocket size={20} /> }
         ]
     ),
     { name: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={20} /> },
@@ -116,8 +119,8 @@ const Navbar = () => {
                 className="flex items-center gap-3 hover:bg-[var(--surface-hover)] p-2 rounded-xl transition-colors duration-200"
               >
                 <div className="w-9 h-9 rounded-full bg-[var(--surface-soft)] flex items-center justify-center text-[var(--primary)] font-bold border border-[var(--border)] overflow-hidden flex-shrink-0">
-                  {user?.profilePic
-                    ? <img src={user.profilePic} alt={user.name} className="w-full h-full object-cover" />
+                  {avatarSrc
+                    ? <img src={avatarSrc} alt={user.name} className="w-full h-full object-cover" />
                     : (user?.name?.charAt(0).toUpperCase() || <User size={18} />)
                   }
                 </div>
@@ -267,8 +270,8 @@ const Navbar = () => {
               <div className="flex flex-col gap-3">
                 <div className="flex items-center gap-3 px-2 mb-2">
                   <div className="w-10 h-10 rounded-full bg-[var(--surface-soft)] flex items-center justify-center text-[var(--primary)] font-bold border border-[var(--border)] overflow-hidden flex-shrink-0">
-                    {user?.profilePic
-                      ? <img src={user.profilePic} alt={user.name} className="w-full h-full object-cover" />
+                    {avatarSrc
+                      ? <img src={avatarSrc} alt={user.name} className="w-full h-full object-cover" />
                       : (user?.name?.charAt(0).toUpperCase() || <User size={20} />)
                     }
                   </div>

@@ -22,7 +22,9 @@ import EditJobPostingPage from "../modules/recruiter-jobs/pages/EditJobPostingPa
 import RecruiterApplicantsPage from "../modules/recruiter-jobs/pages/RecruiterApplicantsPage";
 import JobBoardPage from "../modules/student-jobs/pages/JobBoardPage";
 import MyApplicationsPage from "../modules/student-jobs/pages/MyApplicationsPage";
+import RoadmapPage from "../modules/roadmap/pages/RoadmapPage";
 import ClassroomsDashboard from "../modules/classrooms/pages/ClassroomsDashboard";
+import RoadmapPage from "../modules/roadmap/pages/RoadmapPage";
 import ClassroomRoom from "../modules/classrooms/pages/ClassroomRoom";
 import InterviewLobby from "../modules/mock-interview/pages/InterviewLobby";
 import InterviewSession from "../modules/mock-interview/pages/InterviewSession";
@@ -134,7 +136,23 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/roadmap"
+          element={
+            <ProtectedRoute requiredRole="student">
+              <RoadmapPage />
+            </ProtectedRoute>
+          }
+        />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route
+          path="/roadmap"
+          element={
+            <ProtectedRoute requiredRole="student">
+              <RoadmapPage />
+            </ProtectedRoute>
+          }
+        />
         
         {/* Live Classrooms */}
         <Route

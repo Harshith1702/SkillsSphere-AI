@@ -17,6 +17,8 @@ import {
 import * as resumeService from "./service.js";
 import AnalysisHistory from "../../database/models/AnalysisHistory.js";
 import { verifyLinks } from "../../utils/linkVerifier.js";
+import { buildResumeFileUrl } from "../../utils/uploadPaths.js";
+import { generateComparisonInsights } from "../../utils/aiComparison.js";
 
 const defaultDependencies = {
   parseResume,
@@ -61,7 +63,7 @@ export const uploadResume = asyncHandler(async (req, res, next) => {
     file: {
       originalName: req.file.originalname,
       storedName: req.file.filename,
-      path: `/uploads/${req.file.filename}`,
+      path: buildResumeFileUrl(req.file.filename),
       size: `${(req.file.size / 1024).toFixed(2)} KB`,
       mimeType: req.file.mimetype,
     },
@@ -128,6 +130,7 @@ export const analyzeResume = async (req, res) => {
       ...safePipeline,
       jobSkills,
       jobDescription,
+      mode: pipelineResult.mode || "match",
       file: {
         originalName: file.originalname,
         storedName: file.filename,
@@ -146,6 +149,7 @@ export const analyzeResume = async (req, res) => {
       missingSkills: safePipeline.skillMatch?.missingSkills || [],
       suggestions: safePipeline.gapAnalysis?.suggestions || [],
       breakdown: safePipeline.breakdown || {},
+      mode: pipelineResult.mode || "match",
     });
 
     // Clean up: Limit history to last 10 versions to prevent bloat (Optimized with direct deletion)
@@ -215,6 +219,40 @@ export const getLatestResume = asyncHandler(async (req, res, next) => {
     success: true,
     message: "Latest resume fetched successfully",
     data: resume,
+  });
+});
+
+/**
+ * Compare two analysis versions using AI
+ */
+export const compareVersions = asyncHandler(async (req, res, next) => {
+  const { versionAId, versionBId } = req.body;
+
+  if (!versionAId || !versionBId) {
+    return next(new AppError("Two version IDs are required for comparison", 400));
+  }
+
+  const v1 = await AnalysisHistory.findById(versionAId).lean();
+  const v2 = await AnalysisHistory.findById(versionBId).lean();
+
+  if (!v1 || !v2) {
+    return next(new AppError("One or both analysis versions not found", 404));
+  }
+
+  // Ensure both belong to the user
+  if (v1.user.toString() !== req.user._id.toString() || v2.user.toString() !== req.user._id.toString()) {
+    return next(new AppError("Unauthorized access to these records", 403));
+  }
+
+  const insights = await generateComparisonInsights(v1, v2);
+
+  res.status(200).json({
+    success: true,
+    data: {
+      v1,
+      v2,
+      insights
+    }
   });
 });
 

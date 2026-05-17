@@ -40,7 +40,13 @@ import { logout } from "../../features/auth/authSlice";
 import Button from "../../shared/components/Button";
 import Navbar from "../../shared/landing/Navbar";
 import { getAnalysisHistory, getSkillTrends } from "./services/dashboardService";
+import { getMyRoadmap } from "../roadmap/services/roadmapService";
 import { getRecruiterJobs } from "../recruiter-jobs/services/jobPostingService";
+import { Rocket } from "lucide-react";
+import SuggestionItem from "./components/SuggestionItem";
+import StatCard from "./components/StatCard";
+import PerformanceTrend from "./components/PerformanceTrend";
+import VersionComparisonModal from "./components/VersionComparisonModal";
 
 const ROLE_LABELS = {
   student: "Student",
@@ -48,92 +54,6 @@ const ROLE_LABELS = {
   recruiter: "Recruiter",
 };
 
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-slate-900 border border-gray-200 dark:border-white/10 p-3 rounded-lg shadow-xl backdrop-blur-md">
-        <p className="text-xs text-slate-400 mb-1">{payload[0].payload.fullDate}</p>
-        <p className="text-sm font-bold text-blue-400">Score: {payload[0].value}%</p>
-      </div>
-    );
-  }
-  return null;
-};
-
-const SuggestionItem = ({ suggestion }) => {
-  // Handle both string and object formats for robustness
-  const text = typeof suggestion === "string" ? suggestion : (suggestion?.text || "");
-  const priority = suggestion?.priority || "";
-
-  const suggestionDetails = useMemo(() => {
-    const safeText = text.toLowerCase();
-    
-    if (priority === "Critical" || safeText.includes("urgent") || safeText.includes("missing")) {
-      return {
-        icon: <AlertCircle size={16} className="text-red-400" />,
-        bg: "bg-red-500/5",
-        border: "border-red-500/20",
-        label: "Critical Action",
-        textColor: "text-red-300"
-      };
-    }
-    
-    if (priority === "Strategic" || safeText.includes("add") || safeText.includes("integrate") || safeText.includes("projects")) {
-      return {
-        icon: <Sparkles size={16} className="text-blue-400" />,
-        bg: "bg-blue-500/5",
-        border: "border-blue-500/20",
-        label: "Strategic Tip",
-        textColor: "text-blue-300"
-      };
-    }
-
-    if (priority === "Optimization" || safeText.includes("metric") || safeText.includes("measure") || safeText.includes("highlight")) {
-      return {
-        icon: <TrendingUp size={16} className="text-emerald-400" />,
-        bg: "bg-emerald-500/5",
-        border: "border-emerald-500/20",
-        label: "Growth Area",
-        textColor: "text-emerald-300"
-      };
-    }
-
-    return {
-      icon: <Zap size={16} className="text-amber-400" />,
-      bg: "bg-amber-500/5",
-      border: "border-amber-500/20",
-      label: "Critical Action",
-      textColor: "text-amber-300"
-    };
-  }, [suggestion, text, priority]);
-
-  const { icon, bg, border, label, textColor } = suggestionDetails;
-
-  return (
-    <div className={`group flex flex-col gap-2 p-4 rounded-xl border ${bg} ${border} transition-all duration-300 hover:bg-white/[0.02]`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className={`p-1.5 rounded-lg ${bg} border border-white/5`}>
-            {icon}
-          </div>
-          <span className={`text-[10px] font-bold uppercase tracking-widest ${textColor}`}>{label}</span>
-        </div>
-        <ChevronRight size={14} className="text-slate-600 group-hover:translate-x-0.5 transition-transform" />
-      </div>
-      <p className="text-sm text-gray-700 dark:text-slate-300 leading-relaxed font-medium">
-        {text.split(' ').map((word, i) => {
-          const cleanWord = word.toLowerCase().replace(/[^a-z]/g, '');
-          const isHighlight = ['skills', 'projects', 'metrics', 'achievements', 'keywords', 'experience', 'ats', 'readability'].includes(cleanWord);
-          return (
-            <span key={i} className={isHighlight ? 'text-white font-bold' : ''}>
-              {word}{' '}
-            </span>
-          );
-        })}
-      </p>
-    </div>
-  );
-};
 
 const DashboardPage = () => {
   const dispatch = useDispatch();
@@ -142,6 +62,7 @@ const DashboardPage = () => {
   const [history, setHistory] = useState([]);
   const [recruiterJobs, setRecruiterJobs] = useState([]);
   const [skillTrends, setSkillTrends] = useState([]);
+  const [roadmap, setRoadmap] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedVersions, setSelectedVersions] = useState([]);
   const [showComparison, setShowComparison] = useState(false);
@@ -167,10 +88,12 @@ const DashboardPage = () => {
 
         // Fetch Skill Trends for both if needed, but mostly for students
         if (isStudent) {
-          const trendsResponse = await getSkillTrends();
-          if (trendsResponse.success) {
-            setSkillTrends(trendsResponse.trends || []);
-          }
+          const [trendsRes, roadmapRes] = await Promise.all([
+            getSkillTrends(),
+            getMyRoadmap()
+          ]);
+          if (trendsRes.success) setSkillTrends(trendsRes.trends || []);
+          if (roadmapRes.success) setRoadmap(roadmapRes.data || null);
         }
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
@@ -219,6 +142,7 @@ const DashboardPage = () => {
   }, [selectedVersions, history]);
 
   const latestAnalysis = history.length > 0 ? history[0] : null;
+  const nextMilestone = roadmap?.roadmap?.find(t => t.status !== "completed");
 
   // Recruiter Stats Calculation
   const jobStats = useMemo(() => {
@@ -262,40 +186,25 @@ const DashboardPage = () => {
 
         {/* User Stats Grid */}
         <section className="grid gap-4 sm:gap-6 md:grid-cols-3 grid-cols-1 sm:grid-cols-2">
-          <div className="group relative rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-slate-900/50 p-5 shadow-2xl backdrop-blur-md transition-all hover:border-blue-500/30">
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            <div className="relative">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-blue-500/20 text-blue-400 group-hover:scale-110 transition-transform">
-                <User size={24} />
-              </div>
-              <p className="text-xs font-semibold text-gray-500 dark:text-slate-500 uppercase tracking-widest">Profile Name</p>
-              <p className="mt-1 font-bold text-lg text-gray-900 dark:text-slate-100 break-words">{user?.name || "Not available"}</p>
-            </div>
-          </div>
-
-          <div className="group relative rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-slate-900/50 p-5 shadow-2xl backdrop-blur-md transition-all hover:border-emerald-500/30">
-             <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            <div className="relative">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400 group-hover:scale-110 transition-transform">
-                <Mail size={24} />
-              </div>
-              <p className="text-xs font-semibold text-gray-500 dark:text-slate-500 uppercase tracking-widest">Email Address</p>
-              <p className="mt-1 font-bold text-lg text-gray-900 dark:text-slate-100 break-words">{user?.email || "Not available"}</p>
-            </div>
-          </div>
-
-          <div className="group relative rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-slate-900/50 p-5 shadow-2xl backdrop-blur-md transition-all hover:border-violet-500/30 sm:col-span-2 md:col-span-1">
-             <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-            <div className="relative">
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-violet-500/20 text-violet-400 group-hover:scale-110 transition-transform">
-                <Shield size={24} />
-              </div>
-              <p className="text-xs font-semibold text-gray-500 dark:text-slate-500 uppercase tracking-widest">Access Role</p>
-              <p className="mt-1 font-bold text-lg text-gray-900 dark:text-slate-100">
-                {ROLE_LABELS[user?.role] || user?.role || "Not available"}
-              </p>
-            </div>
-          </div>
+          <StatCard 
+            icon={User} 
+            label="Profile Name" 
+            value={user?.name || "Not available"} 
+            color="blue" 
+          />
+          <StatCard 
+            icon={Mail} 
+            label="Email Address" 
+            value={user?.email || "Not available"} 
+            color="emerald" 
+          />
+          <StatCard 
+            icon={Shield} 
+            label="Access Role" 
+            value={ROLE_LABELS[user?.role] || user?.role || "Not available"} 
+            color="violet" 
+            className="sm:col-span-2 md:col-span-1"
+          />
         </section>
 
         {/* Recruiter Specific Stats Grid */}
@@ -343,66 +252,49 @@ const DashboardPage = () => {
         <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             
+            {/* Next Roadmap Milestone - New Integration */}
+            {isStudent && nextMilestone && (
+              <Link to="/roadmap" className="block group">
+                <div className="mb-6 p-6 bg-gradient-to-br from-blue-600/20 to-indigo-900/40 border border-blue-500/20 rounded-[2rem] hover:border-blue-500/40 transition-all shadow-xl relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 group-hover:opacity-20 transition-all">
+                    <Rocket size={80} className="text-blue-400" />
+                  </div>
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Target size={16} className="text-blue-400" />
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-400">Next Career Milestone</span>
+                    </div>
+                    <h3 className="text-xl font-bold text-white mb-2 group-hover:text-blue-400 transition-colors">
+                      Master {nextMilestone.topicName}
+                    </h3>
+                    <p className="text-sm text-slate-400 max-w-md mb-4 font-medium italic">
+                      "Completing this milestone will significantly boost your profile strength for {roadmap.targetRole} roles."
+                    </p>
+                    <div className="flex items-center gap-2 text-xs font-bold text-white bg-white/5 w-fit px-4 py-2 rounded-xl group-hover:bg-blue-600 transition-all">
+                      Continue Learning <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            )}
+
             {/* Score Trend Chart - Student Only */}
             {isStudent && (
-              <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-slate-900/50 overflow-hidden backdrop-blur-md">
-                <div className="border-b border-white/5 bg-white/5 px-6 py-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <BarChart3 className="text-blue-400" size={20} />
-                    <h2 className="text-lg font-bold">Performance Trend</h2>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400 bg-white/5 px-2 py-1 rounded-md">
-                    <Calendar size={12} />
-                    <span>Last {history.length} Analyses</span>
-                  </div>
-                </div>
-                <div className="p-6 h-[280px] min-h-[280px] w-full">
-                  {history.length > 1 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData}>
-                        <defs>
-                          <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                        <XAxis 
-                          dataKey="date" 
-                          stroke="#94a3b8" 
-                          fontSize={10} 
-                          tickLine={false} 
-                          axisLine={false}
-                          dy={10}
-                        />
-                        <YAxis 
-                          stroke="#94a3b8" 
-                          fontSize={10} 
-                          tickLine={false} 
-                          axisLine={false}
-                          domain={[0, 100]}
-                          tickFormatter={(val) => `${val}%`}
-                        />
-                        <RechartsTooltip content={<CustomTooltip />} />
-                        <Area 
-                          type="monotone" 
-                          dataKey="score" 
-                          stroke="#3b82f6" 
-                          strokeWidth={2}
-                          fillOpacity={1} 
-                          fill="url(#colorScore)" 
-                          animationDuration={1500}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-gray-500 dark:text-slate-500">
-                      <Activity size={40} className="opacity-20 mb-3" />
-                      <p className="text-sm">Need at least 2 analyses to show trend</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <PerformanceTrend 
+                data={chartData} 
+                historyLength={history.length} 
+                customTooltip={({ active, payload }) => {
+                  if (active && payload && payload.length) {
+                    return (
+                      <div className="bg-slate-900 border border-gray-200 dark:border-white/10 p-3 rounded-lg shadow-xl backdrop-blur-md">
+                        <p className="text-xs text-slate-400 mb-1">{payload[0].payload.fullDate}</p>
+                        <p className="text-sm font-bold text-blue-400">Score: {payload[0].value}%</p>
+                      </div>
+                    );
+                  }
+                  return null;
+                }}
+              />
             )}
 
             {/* Skill Trends - Student Only */}
@@ -585,7 +477,14 @@ const DashboardPage = () => {
                             <span className="absolute text-xl font-black">{latestAnalysis.score}%</span>
                           </div>
                           <div>
-                            <p className="text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Overall Score</p>
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Overall Score</p>
+                              {latestAnalysis.mode === "benchmark" && (
+                                <span className="px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[8px] font-black uppercase tracking-tighter border border-blue-500/20">
+                                  Benchmark
+                                </span>
+                              )}
+                            </div>
                             <p className="text-2xl font-black text-white">{latestAnalysis.classification}</p>
                           </div>
                         </div>
@@ -637,7 +536,20 @@ const DashboardPage = () => {
                     <Clock className="text-violet-400" size={20} />
                     <h2 className="text-lg font-bold">Analysis History</h2>
                   </div>
-                  <span className="text-xs font-medium text-gray-500 dark:text-slate-500">{history.length} records found</span>
+                  <div className="flex items-center gap-4">
+                    {selectedVersions.length === 2 && (
+                      <Button 
+                        size="xs" 
+                        variant="primary" 
+                        leftIcon={<TrendingUp size={12} />}
+                        onClick={() => setShowComparison(true)}
+                        className="bg-blue-600 hover:bg-blue-500 animate-in zoom-in-95 duration-200"
+                      >
+                        Compare Selected ({selectedVersions.length})
+                      </Button>
+                    )}
+                    <span className="text-xs font-medium text-gray-500 dark:text-slate-500">{history.length} records found</span>
+                  </div>
                 </div>
                 
                 <div className="overflow-x-auto">
@@ -673,6 +585,9 @@ const DashboardPage = () => {
                             <td className="px-6 py-4 text-sm font-bold whitespace-nowrap">
                               <span className={`${item.score >= 70 ? "text-emerald-400" : item.score >= 40 ? "text-yellow-400" : "text-red-400"}`}>
                                 {item.score}%
+                                {item.mode === "benchmark" && (
+                                  <span className="ml-2 text-[8px] opacity-60 text-blue-400 font-black uppercase">BM</span>
+                                )}
                               </span>
                             </td>
                             <td className="px-6 py-4 text-sm whitespace-nowrap">
@@ -848,100 +763,44 @@ const DashboardPage = () => {
         </section>
       </div>
 
-      {/* Floating Comparison Bar */}
-      {selectedVersions.length === 2 && !showComparison && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-slate-900 border border-blue-500/50 p-4 rounded-2xl shadow-[0_0_30px_rgba(59,130,246,0.3)] flex items-center gap-6 animate-slide-up">
-          <div className="text-sm font-bold">
-            <span className="text-blue-400">2 Versions Selected</span>
+      {/* Comparison Modal */}
+      <VersionComparisonModal 
+        isOpen={showComparison}
+        onClose={() => setShowComparison(false)}
+        versions={compareData}
+      />
+
+      {/* Floating Selection Bar */}
+      {selectedVersions.length > 0 && !showComparison && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-slate-900 border border-blue-500/30 p-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-slide-up">
+          <div className="flex items-center gap-3">
+            <div className="flex -space-x-2">
+              {selectedVersions.map((_, i) => (
+                <div key={i} className="h-8 w-8 rounded-full bg-blue-600 border-2 border-slate-900 flex items-center justify-center text-[10px] font-black">
+                  V{i + 1}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs font-bold text-white whitespace-nowrap">
+              {selectedVersions.length} {selectedVersions.length === 1 ? 'version' : 'versions'} selected
+            </p>
           </div>
-          <div className="h-8 w-px bg-white/10"></div>
-          <div className="flex gap-3">
+          
+          <div className="flex items-center gap-2 border-l border-white/10 pl-4">
             <button 
               onClick={() => setSelectedVersions([])}
               className="px-4 py-2 text-xs font-bold uppercase text-slate-400 hover:text-white transition-colors"
             >
               Clear
             </button>
-            <button 
-              onClick={() => setShowComparison(true)}
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase rounded-xl transition-all shadow-lg"
-            >
-              Compare Now
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Comparison Overlay */}
-      {showComparison && compareData && (
-        <div className="fixed inset-0 z-[60] bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-8 animate-in fade-in duration-300">
-          <div className="bg-slate-900 border border-white/10 w-full max-w-5xl rounded-[2rem] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/5">
-              <h2 className="text-2xl font-black italic">Version <span className="text-blue-400">Comparison</span></h2>
+            {selectedVersions.length === 2 && (
               <button 
-                onClick={() => setShowComparison(false)}
-                className="p-2 hover:bg-white/10 rounded-full transition-colors"
+                onClick={() => setShowComparison(true)}
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-black uppercase rounded-xl transition-all shadow-lg shadow-blue-600/20"
               >
-                <PlusCircle className="rotate-45 text-slate-400" size={24} />
+                Compare Now
               </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
-                <div className="absolute left-1/2 top-0 bottom-0 w-px bg-white/10 -translate-x-1/2 hidden md:block"></div>
-                
-                {compareData.map((version, i) => (
-                  <div key={i} className="space-y-8">
-                    <div className="text-center">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Version {i + 1}</p>
-                      <h3 className="text-lg font-bold">{version ? new Date(version.createdAt).toLocaleString() : 'N/A'}</h3>
-                    </div>
-                    
-                    {/* Score Metric */}
-                    <div className="bg-white/5 border border-white/5 rounded-2xl p-6 text-center">
-                       <div className={`text-5xl font-black mb-2 ${version?.score >= 70 ? 'text-emerald-400' : version?.score >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>
-                         {version?.score || 0}%
-                       </div>
-                       <p className="text-xs font-bold uppercase tracking-wider text-slate-400">{version?.classification}</p>
-                    </div>
-
-                    {/* Detail breakdown */}
-                    <div className="space-y-4">
-                      {['impactMatch', 'readabilityMatch', 'keywordMatch'].map(key => {
-                        const score = version?.breakdown?.[key] || 0;
-                        const label = key.replace(/([A-Z])/g, ' $1').trim();
-                        return (
-                          <div key={key} className="space-y-1.5">
-                            <div className="flex justify-between text-[10px] font-bold uppercase tracking-tight text-slate-400">
-                              <span className="capitalize">{label}</span>
-                              <span>{score}%</span>
-                            </div>
-                            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                              <div 
-                                className={`h-full transition-all duration-1000 ${score >= 70 ? 'bg-emerald-500' : score >= 40 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                                style={{ width: `${score}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Top Skills */}
-                    <div className="space-y-2">
-                       <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">Key Skills Found</h4>
-                       <div className="flex flex-wrap gap-1.5">
-                          {version?.skills?.slice(0, 5).map((s, idx) => (
-                            <span key={idx} className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold rounded">
-                              {s}
-                            </span>
-                          ))}
-                       </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
         </div>
       )}

@@ -5,21 +5,24 @@ dotenv.config();
 
 import http from "http";
 import { Server } from "socket.io";
-import path from "path";
 import connectDB from "./src/database/db.js";
 import authRoutes from "./src/modules/auth/routes.js";
 import resumeRoutes from "./src/modules/resumes/routes.js";
 import jobRoutes from "./src/modules/jobs/routes.js";
+import roadmapRoutes from "./src/modules/roadmap/routes.js";
 import matchingRoutes from "./src/modules/matching/routes.js";
 import dashboardRoutes from "./src/modules/dashboard/routes.js";
 import classroomRoutes from "./src/modules/classrooms/routes.js";
 import userRoutes from "./src/modules/users/routes.js";
 import interviewRoutes from "./src/modules/interviews/routes.js";
+import fileRoutes from "./src/modules/files/routes.js";
 import { initClassroomSockets } from "./src/modules/classrooms/socket.js";
 import globalErrorHandler from "./src/middleware/errorMiddleware.js";
 import { logEvaluatorConfig } from "./src/config/evaluatorConfig.js";
 import { setIO } from "./src/utils/socketIO.js";
 import { initNotificationSockets } from "./src/modules/notifications/socket.js";
+import swaggerUi from 'swagger-ui-express';
+import swaggerSpec from './src/config/swaggerConfig.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -38,7 +41,7 @@ setIO(io);
 app.use(cors());
 
 app.use(express.json());
-app.use("/uploads", express.static(path.resolve("src", "uploads")));
+// Uploads are NOT served publicly — use /api/files/* with auth (see files/routes.js)
 
 await connectDB();
 logEvaluatorConfig();
@@ -46,6 +49,9 @@ logEvaluatorConfig();
 app.get("/health", (req, res) => {
   res.json({ status: "OK" });
 });
+
+// Swagger Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.post("/api/chat", (req, res) => {
   try {
@@ -77,11 +83,13 @@ app.post("/api/chat", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/resume", resumeRoutes);
 app.use("/api/jobs", jobRoutes);
+app.use("/api/roadmap", roadmapRoutes);
 app.use("/api/matching", matchingRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/classrooms", classroomRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/interviews", interviewRoutes);
+app.use("/api/files", fileRoutes);
 
 // Initialize Sockets
 initClassroomSockets(io);

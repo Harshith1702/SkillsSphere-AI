@@ -42,6 +42,7 @@ SkillSphere AI aims to simplify the path from learning to hiring by giving users
    - Drag & Drop / clipboard paste upload
    - ATS score with detailed analysis dashboard
    - Missing keyword identification
+   - **Industry Benchmarking Mode** — Analyzes your resume against market standards even without a specific Job Description (BM badge).
    - Live PDF document preview
 
 3. **Resume vs Job Description Matcher**  
@@ -61,8 +62,15 @@ SkillSphere AI aims to simplify the path from learning to hiring by giving users
    - Python AI microservice for NLP evaluation (spaCy + sentence-transformers)
    - Fail-soft mode: falls back to mock scores when AI service is unavailable
 
-5. **Skill Tracking Dashboard**  
-   Performance insights to help students and tutors track growth.
+5. **Interactive Learning Roadmaps**  
+   Personalized skill-trees generated from AI analysis. (Route: `/roadmap`)
+   - Visual vertical progression path with interactive milestones
+   - Real-time "Job-Readiness" percentage tracking
+   - Direct integration with Dashboard for "Next Step" guidance
+   - Automatic sync with latest Resume Analysis feedback
+
+6. **Skill Tracking Dashboard**  
+   Performance insights and "Next Learning Milestone" guidance to help students track growth.
 
 6. **Secure Authentication & Email Verification**  
    OTP-based registration and password recovery system.
@@ -105,14 +113,41 @@ SkillSphere AI aims to simplify the path from learning to hiring by giving users
 To simplify setup, you can now run the entire project using root-level scripts.
 
 ### Install all dependencies
-npm run install-all
 
-### Run the project (client + server together)
+```bash
+npm run install-all
+```
+
+This installs:
+
+- Root dependencies
+- Client dependencies
+- Server dependencies
+- Python microservice dependencies (creates `interview-ai-service/venv` and downloads spaCy model)
+
+### Run everything (client + server + Python microservice) from root
+
+```bash
 npm run dev
+```
 
 This will start:
+
 - Frontend (client)
 - Backend (server)
+- Interview AI Service (Python microservice on port 8000)
+
+### One command (first-time or fresh clone)
+
+```bash
+npm run quickstart
+```
+
+### Optional: run only client + server (no Python service)
+
+```bash
+npm run dev:web
+```
 
 > ⚠️ Backend requires environment variables to run properly. Refer to the Environment Setup section below.
 
@@ -129,8 +164,8 @@ SkillSphere-AI/
 │   │   └── services/                # API service layer
 ├── server/                          # Express backend
 │   ├── src/
-│   │   ├── modules/                 # Backend business logic by domain
-│   │   ├── database/                # Mongoose models and connection
+│   │   ├── modules/                 # Backend business logic (Auth, Resumes, Jobs, Roadmap)
+│   │   ├── database/                # Mongoose models (User, Resume, JobApplication, LearningProgress)
 │   │   └── middleware/              # Auth, RBAC, and Upload handlers
 ├── ai-ml/                           # AI/ML intelligence layer
 │   ├── evaluators/                  # Skill, Keyword, and Experience matchers
@@ -158,6 +193,9 @@ SkillSphere-AI/
 - `POST /api/resume/analyze` (v2: uses latest-only upsert flow)
 - `GET /api/resume/me/latest`: fetch user's latest parsed resume (no raw resumeText)
 - `GET /api/resume/result/:id`
+- `GET /api/roadmap/me`: fetch user's learning roadmap and progress
+- `POST /api/roadmap/sync`: sync roadmap with latest analysis suggestions
+- `PATCH /api/roadmap/update-topic`: update status of a specific roadmap milestone
 
 - `GET /uploads/:filename`
 - `POST /api/jobs`: create a new job (Recruiter only)
@@ -182,11 +220,6 @@ SkillSphere-AI/
 - **Future-ready:** Supports adding new learning/career modules without major rewrites
 
 ---
-
-```md
-
-
-
 
 ## For Open-Source Contributors
 
@@ -236,7 +269,40 @@ npm install
 npm run dev
 ```
 
+### Interview AI Service (Python microservice)
+
+This service powers speech-to-text transcription and answer evaluation for the Mock Interview module. The Node backend can run without it (it falls back to mock scores), but for real AI evaluation you should start it locally.
+
+**Requirements:** Python 3.10+
+
+```bash
+cd interview-ai-service
+
+# Create virtual environment
+python -m venv venv
+
+# Activate
+# Linux/Mac:
+# source venv/bin/activate
+# Windows:
+# venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Download spaCy English model
+python -m spacy download en_core_web_sm
+
+# Run the API (default port 8000)
+python -m uvicorn main:app --reload --port 8000
+```
+
+Health check: `http://localhost:8000/health`
+
+Optional env var (defaults to `base`): `WHISPER_MODEL_SIZE=tiny|base|small|medium|large-v3`
+
 ## 🔐 Environment Variables Setup
+
 > ⚠️ The backend will not start without configuring the required environment variables.
 
 ### Server
@@ -256,9 +322,11 @@ cp .env.example .env
 - `GOOGLE_CLIENT_SECRET`
 
 # AI/ML Configuration (Required for semantic matching — free tier)
+
 HF_API_TOKEN=your_hugging_face_token
 
 ## 🔐 Google OAuth Setup
+
 - `EMAIL_SERVICE_MODE=console` (Use "smtp" for real emails)
 - `EMAIL_HOST=smtp.gmail.com`
 - `EMAIL_PORT=587`
@@ -267,6 +335,7 @@ HF_API_TOKEN=your_hugging_face_token
 - `EMAIL_FROM="SkillsSphere AI" <your-email@gmail.com>`
 
 # Evaluator toggles and weights (optional)
+
 EVALUATOR_SKILL_MATCH_ENABLED=true
 EVALUATOR_KEYWORD_MATCH_ENABLED=true
 EVALUATOR_EXPERIENCE_MATCH_ENABLED=true
@@ -275,6 +344,7 @@ EVALUATOR_KEYWORD_MATCH_WEIGHT=0.2
 EVALUATOR_EXPERIENCE_MATCH_WEIGHT=0.2
 
 # Interview AI Service (Python microservice for answer evaluation)
+
 INTERVIEW_AI_URL=http://localhost:8000
 INTERVIEW_AI_TIMEOUT=10000
 INTERVIEW_AI_TRANSCRIBE_TIMEOUT=30000
@@ -307,6 +377,7 @@ cp .env.example .env
 - `EMAIL_USER=your_smtp_username`
 - `EMAIL_PASS=your_smtp_password`
 - `HF_API_TOKEN=hf_...` (Free — required for semantic resume matching)
+
 1. Open Google Cloud Console.
 2. Create/select your project.
 3. Configure OAuth consent screen.

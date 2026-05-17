@@ -13,6 +13,7 @@ import { useNavigate } from "react-router-dom";
 import { updateUserProfile, logout } from "../../features/auth/authSlice";
 import { updateProfile, deleteProfile, uploadAvatar, removeAvatar } from "./services/profileService";
 import LoadingState from "../../shared/components/LoadingState";
+import { getProtectedAssetUrl } from "../../utils/protectedAssetUrl";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ const DeleteModal = ({ onConfirm, onCancel, loading }) => (
 
 // ─── Avatar Editor ────────────────────────────────────────────────────────────
 
-const AvatarEditor = ({ user, roleConfig, onUpload, onRemove, uploading, isEditing }) => {
+const AvatarEditor = ({ user, roleConfig, onUpload, onRemove, uploading, isEditing, token }) => {
   const fileRef = useRef(null);
   const [preview, setPreview] = useState(null);
   const [pendingFile, setPendingFile] = useState(null);
@@ -91,8 +92,28 @@ const AvatarEditor = ({ user, roleConfig, onUpload, onRemove, uploading, isEditi
     setTimeout(() => setJustSaved(false), 3000);
   };
 
-  const displayPic = preview || user.profilePic;
-  const hasPending = Boolean(pendingFile);
+  const handleCancelPreview = () => {
+    setPreview(null);
+    setPendingFile(null);
+  };
+
+  const handleRemove = () => {
+    setPreview(null);
+    setPendingFile(null);
+    setJustSaved(false);
+    onRemove();
+  };
+
+  const displayPic = preview || getProtectedAssetUrl(user.profilePic, token);
+  const initials = getInitials(user.name || "");
+  const hasPendingChange = Boolean(pendingFile);
+
+  // What to show below the avatar:
+  // 1. hasPendingChange  → Save / Cancel
+  // 2. uploading         → spinner text
+  // 3. justSaved         → green success tick
+  // 4. user.profilePic   → Change Photo / Remove
+  // 5. no photo          → Upload Photo + hint
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -289,17 +310,51 @@ const ProfilePage = () => {
         </div>
       </div>
 
-      {/* ── Profile identity row ── */}
-      <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 shadow-sm">
-        <div className="max-w-6xl mx-auto px-6 pb-5">
-          <div className="flex items-start gap-5 -mt-16 sm:-mt-12 flex-wrap">
-            {/* Avatar — overlaps banner */}
-            <div className="flex-shrink-0 z-10">
-              <AvatarEditor user={user} roleConfig={roleConfig}
-                onUpload={handleAvatarUpload} onRemove={handleAvatarRemove}
-                uploading={avatarUploading} isEditing={isEditing} />
-              {avatarError && <p className="text-xs text-red-500 mt-1 text-center">{avatarError}</p>}
-            </div>
+        {/* ── Hero card ── */}
+        <Card className="mb-5 overflow-hidden">
+          {/* Gradient banner */}
+          <div className={`h-24 bg-gradient-to-r ${roleConfig.avatar} opacity-80 dark:opacity-60`} />
+
+          <div className="px-6 pb-6">
+            {/* Avatar + info — centered layout */}
+            <div className="flex flex-col items-center text-center -mt-14 mb-4">
+
+              {/* Avatar Editor */}
+              <AvatarEditor
+                user={user}
+                roleConfig={roleConfig}
+                onUpload={handleAvatarUpload}
+                onRemove={handleAvatarRemove}
+                uploading={avatarUploading}
+                isEditing={isEditing}
+                token={token}
+              />
+
+              {avatarError && (
+                <p className="mt-2 text-xs text-red-500 dark:text-red-400">{avatarError}</p>
+              )}
+
+              {/* Name + email */}
+              <div className="mt-3">
+                <h1 className="text-xl font-bold text-slate-800 dark:text-white font-heading leading-tight">
+                  {user.name}
+                </h1>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{user.email}</p>
+              </div>
+
+              {/* Badges */}
+              <div className="flex flex-wrap gap-2 justify-center mt-3">
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border
+                  ${user.role === "student" ? "bg-indigo-100 text-indigo-700 border-indigo-300 dark:bg-brand-600/20 dark:text-brand-300 dark:border-brand-500/30"
+                  : user.role === "tutor" ? "bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/30"
+                  : "bg-violet-100 text-violet-700 border-violet-300 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-500/30"}`}>
+                  {roleConfig.icon} {roleConfig.label}
+                </span>
+                {verificationBadge}
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-white/10">
+                  <Sparkles size={11} /> Member since {formatDate(user.createdAt)}
+                </span>
+              </div>
 
             {/* Name + role + meta — starts after banner ends (~mt-16 offset) */}
             <div className="flex-1 min-w-0 mt-20 pb-1">
