@@ -1,4 +1,5 @@
 import path from "path";
+import fs from "fs";
 import { parseResume } from "../../utils/parseResume.js";
 import Resume from "../../database/models/Resume.js";
 import asyncHandler from "../../utils/asyncHandler.js";
@@ -17,8 +18,8 @@ import {
 import * as resumeService from "./service.js";
 import AnalysisHistory from "../../database/models/AnalysisHistory.js";
 import { verifyLinks } from "../../utils/linkVerifier.js";
-import { buildResumeFileUrl } from "../../utils/uploadPaths.js";
 import { generateComparisonInsights } from "../../utils/aiComparison.js";
+import { buildSignedFileUrl } from "../../utils/signedFileUrl.js";
 
 const defaultDependencies = {
   parseResume,
@@ -57,13 +58,18 @@ export const uploadResume = asyncHandler(async (req, res, next) => {
     return next(new AppError("No file uploaded", 400));
   }
 
+  // Build signed file URL for the uploaded resume
+  const resumePath = `/api/files/resumes/${req.file.filename}`;
+  const expiresAt = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60); // 7 days from now
+  const signedUrl = buildSignedFileUrl({ path: resumePath, expiresAt });
+  
   res.status(200).json({
     success: true,
     message: "Resume uploaded successfully",
     file: {
       originalName: req.file.originalname,
       storedName: req.file.filename,
-      path: buildResumeFileUrl(req.file.filename),
+      path: signedUrl,
       size: `${(req.file.size / 1024).toFixed(2)} KB`,
       mimeType: req.file.mimetype,
     },
